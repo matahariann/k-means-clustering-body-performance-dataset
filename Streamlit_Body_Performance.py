@@ -39,8 +39,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Load model
-@st.cache_resource
 with open('Model_KMeans_Body_Performance.pkl', 'rb') as f:
     pipeline = pickle.load(f)
 
