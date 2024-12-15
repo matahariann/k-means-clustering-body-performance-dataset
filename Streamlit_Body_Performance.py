@@ -41,11 +41,9 @@ st.markdown("""
 
 # Load model
 @st.cache_resource
-def load_model():
-    with open('Model_KMeans_Body_Performance.pkl', 'rb') as f:
-        return pickle.load(f)
+with open('Model_KMeans_Body_Performance.pkl', 'rb') as f:
+    pipeline = pickle.load(f)
 
-pipeline = load_model()
 encoder = pipeline['encoder']
 scaler = pipeline['scaler']
 kmeans = pipeline['kmeans']
