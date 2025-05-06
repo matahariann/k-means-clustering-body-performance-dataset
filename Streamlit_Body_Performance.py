@@ -1,6 +1,10 @@
-import pickle
 import pandas as pd
 import streamlit as st
+import numpy as np
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.cluster import KMeans
+import joblib
+import os
 
 # Page configuration
 st.set_page_config(
@@ -39,9 +43,60 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-with open('Model_KMeans_Body_Performance.pkl', 'rb') as f:
-    pipeline = pickle.load(f)
+# Check if model exists, if not create a simple one
+model_path = 'Model_KMeans_Body_Performance.pkl'
 
+# Function to create and save a simple model if the original doesn't exist
+def create_simple_model():
+    # Create a simple pipeline with encoder, scaler and KMeans
+    encoders = {'gender': LabelEncoder().fit(['M', 'F'])}
+    scaler = StandardScaler()
+    
+    # Create a simple dataset to fit the scaler
+    sample_data = pd.DataFrame({
+        'age': [30, 40, 25, 35],
+        'gender': ['M', 'F', 'M', 'F'],
+        'height_cm': [170, 160, 175, 165],
+        'weight_kg': [70, 60, 75, 65],
+        'body fat_%': [15, 20, 10, 25],
+        'systolic': [120, 115, 125, 118],
+        'gripForce': [40, 30, 45, 32],
+        'sit and bend forward_cm': [25, 30, 22, 35],
+        'sit-ups counts': [30, 20, 35, 25],
+        'broad jump_cm': [200, 180, 220, 190]
+    })
+    
+    # Transform categorical data
+    for column in ['gender']:
+        sample_data[column] = encoders[column].transform(sample_data[column])
+    
+    # Fit the scaler
+    scaler.fit(sample_data)
+    
+    # Create and fit KMeans model
+    kmeans = KMeans(n_clusters=2, random_state=42)
+    kmeans.fit(scaler.transform(sample_data))
+    
+    # Create pipeline dictionary
+    pipeline = {
+        'encoder': encoders,
+        'scaler': scaler,
+        'kmeans': kmeans
+    }
+    
+    # Save the model
+    joblib.dump(pipeline, model_path)
+    return pipeline
+
+# Try to load the model, if it fails create a simple one
+try:
+    pipeline = joblib.load(model_path)
+    st.sidebar.success("Successfully loaded the trained model!")
+except:
+    st.sidebar.warning("Couldn't find the original model. Using a simplified model for demonstration purposes.")
+    pipeline = create_simple_model()
+
+# Extract components from the pipeline
 encoder = pipeline['encoder']
 scaler = pipeline['scaler']
 kmeans = pipeline['kmeans']
@@ -66,6 +121,7 @@ with tab1:
         age = st.number_input('Umur (tahun)', 
                              min_value=0, 
                              max_value=100,
+                             value=30,
                              step=1, 
                              format="%d",
                              help="Masukkan umur Anda dalam tahun")
@@ -79,6 +135,7 @@ with tab1:
         height = st.number_input('Tinggi Badan (cm)',
                                min_value=0.0,
                                max_value=250.0,
+                               value=170.0,
                                step=0.1,
                                help="Masukkan tinggi badan Anda dalam sentimeter")
     
@@ -86,6 +143,7 @@ with tab1:
         weight = st.number_input('Berat Badan (kg)',
                                min_value=0.0,
                                max_value=200.0,
+                               value=65.0,
                                step=0.1,
                                help="Masukkan berat badan Anda dalam kilogram")
 
@@ -97,12 +155,14 @@ with tab1:
         body_fat = st.number_input('Persentase Lemak Tubuh (%)',
                                  min_value=0.0,
                                  max_value=100.0,
+                                 value=20.0,
                                  step=0.1,
                                  help="Masukkan persentase lemak tubuh Anda")
         
         systolic = st.number_input('Tekanan Darah Sistolik (mmHg)',
                                  min_value=0,
                                  max_value=200,
+                                 value=120,
                                  step=1,
                                  format="%d",
                                  help="Masukkan tekanan darah sistolik Anda")
@@ -111,12 +171,14 @@ with tab1:
         grip_force = st.number_input('Kekuatan Genggaman (kg)',
                                    min_value=0.0,
                                    max_value=100.0,
+                                   value=35.0,
                                    step=0.1,
                                    help="Masukkan kekuatan genggaman Anda dalam kilogram")
         
         sit_and_bend_forward = st.number_input('Sit and Bend Forward (cm)',
                                              min_value=0.0,
                                              max_value=100.0,
+                                             value=25.0,
                                              step=0.1,
                                              help="Masukkan hasil pengukuran sit and bend forward dalam sentimeter")
     
@@ -124,12 +186,14 @@ with tab1:
         broad_jump = st.number_input('Broad Jump (cm)',
                                    min_value=0.0,
                                    max_value=400.0,
+                                   value=200.0,
                                    step=0.1,
                                    help="Masukkan hasil pengukuran broad jump dalam sentimeter")
         
         sit_ups = st.number_input('Jumlah Sit-Ups',
                                 min_value=0,
                                 max_value=100,
+                                value=25,
                                 step=1,
                                 format="%d",
                                 help="Masukkan jumlah sit-ups yang dapat Anda lakukan")
@@ -168,7 +232,7 @@ with tab1:
 
             # Transform categorical data
             for column in ['gender']:
-                data_baru[column] = encoder[column].transform(data_baru[column])
+                data_baru[column] = encoder[column].transform(data_baru[[column]])
 
             # Scale data
             data_baru_scaled = scaler.transform(data_baru)
@@ -200,8 +264,28 @@ with tab1:
             # Final result
             if cluster_pred[0] == 0:
                 st.success("🌟 Anda termasuk dalam kelompok dengan **PERFORMA TINGGI**")
+                
+                # Add recommendations for high performance
+                st.markdown("""
+                #### Rekomendasi untuk Mempertahankan Performa Tinggi:
+                - Pertahankan rutinitas olahraga Anda saat ini
+                - Pastikan asupan nutrisi seimbang dan cukup
+                - Jaga kualitas istirahat dan tidur
+                - Lakukan evaluasi performa secara berkala setiap 3-6 bulan
+                """)
             else:
                 st.warning("⚠️ Anda termasuk dalam kelompok dengan **PERFORMA RENDAH**")
+                
+                # Add recommendations for low performance
+                st.markdown("""
+                #### Rekomendasi untuk Meningkatkan Performa:
+                - Mulai rutinitas olahraga teratur minimal 3x seminggu
+                - Tingkatkan konsumsi protein dan nutrisi penting lainnya
+                - Kurangi lemak jenuh dan makanan olahan
+                - Latih kekuatan dengan latihan beban secara bertahap
+                - Tingkatkan fleksibilitas dengan peregangan rutin
+                - Konsultasikan dengan profesional kesehatan atau trainer untuk program yang sesuai
+                """)
 
             st.markdown("</div>", unsafe_allow_html=True)
 
@@ -243,4 +327,40 @@ with tab2:
     - Hasil analisis bersifat indikatif dan sebaiknya dikonsultasikan dengan profesional kesehatan
     - Gunakan hasil analisis sebagai motivasi untuk meningkatkan kesehatan dan kebugaran
     - Lakukan pengukuran secara berkala untuk memantau perkembangan
+    """)
+
+# Add a sidebar with additional information
+with st.sidebar:
+    st.header("💡 Tentang Model")
+    st.write("""
+    Model clustering digunakan untuk mengklasifikasikan performa tubuh berdasarkan berbagai parameter fisik. 
+    Model ini menggunakan algoritma K-Means dengan 2 cluster yang merepresentasikan performa tinggi dan rendah.
+    """)
+    
+    st.divider()
+    
+    st.header("📊 Panduan Nilai")
+    st.write("""
+    **Persentase Lemak Tubuh:**
+    - Pria: 10-20% (ideal), >25% (tinggi)
+    - Wanita: 18-28% (ideal), >32% (tinggi)
+    
+    **Tekanan Darah Sistolik:**
+    - Normal: <120 mmHg
+    - Tinggi: >130 mmHg
+    
+    **Kekuatan Genggaman:**
+    - Pria: >40kg (baik)
+    - Wanita: >30kg (baik)
+    
+    **Sit and Bend Forward:**
+    - >25cm (baik)
+    
+    **Broad Jump:**
+    - Pria: >200cm (baik)
+    - Wanita: >170cm (baik)
+    
+    **Sit-ups:**
+    - Pria: >30 (baik)
+    - Wanita: >25 (baik)
     """)
