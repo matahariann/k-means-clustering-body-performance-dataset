@@ -1,9 +1,7 @@
 import pandas as pd
 import streamlit as st
 import numpy as np
-from sklearn.preprocessing import StandardScaler, LabelEncoder
-from sklearn.cluster import KMeans
-import joblib
+import pickle
 import os
 
 # Page configuration
@@ -43,69 +41,69 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Check if model exists, if not create a simple one
-model_path = 'Model_KMeans_Body_Performance.pkl'
+# Simple model implementation (without requiring sklearn)
+class SimpleBodyPerformanceModel:
+    def __init__(self):
+        # Simplified thresholds based on typical fitness guidelines
+        self.thresholds = {
+            'body fat_%': {'Male': 20, 'Female': 28},
+            'systolic': 130,
+            'gripForce': {'Male': 40, 'Female': 30},
+            'sit and bend forward_cm': 25,
+            'broad jump_cm': {'Male': 200, 'Female': 170},
+            'sit-ups counts': {'Male': 30, 'Female': 25}
+        }
+    
+    def predict(self, data):
+        """Predict performance based on simplified rules"""
+        gender = 'Male' if data['gender'] == 'M' else 'Female'
+        
+        # Count how many metrics meet high performance thresholds
+        score = 0
+        total_metrics = 6
+        
+        # Body fat (lower is better)
+        if data['body fat_%'] <= self.thresholds['body fat_%'][gender]:
+            score += 1
+            
+        # Systolic blood pressure (lower is better)
+        if data['systolic'] <= self.thresholds['systolic']:
+            score += 1
+            
+        # Grip force (higher is better)
+        if data['gripForce'] >= self.thresholds['gripForce'][gender]:
+            score += 1
+            
+        # Sit and bend forward (higher is better)
+        if data['sit and bend forward_cm'] >= self.thresholds['sit and bend forward_cm']:
+            score += 1
+            
+        # Broad jump (higher is better)
+        if data['broad jump_cm'] >= self.thresholds['broad jump_cm'][gender]:
+            score += 1
+            
+        # Sit-ups (higher is better)
+        if data['sit-ups counts'] >= self.thresholds['sit-ups counts'][gender]:
+            score += 1
+            
+        # Calculate performance ratio
+        performance_ratio = score / total_metrics
+        
+        # Return cluster prediction (0 for high performance, 1 for low performance)
+        # and distances (calculated as 1 - performance_ratio for high, performance_ratio for low)
+        if performance_ratio >= 0.5:
+            return 0, [(1 - performance_ratio), performance_ratio]
+        else:
+            return 1, [(1 - performance_ratio), performance_ratio]
 
-# Function to create and save a simple model if the original doesn't exist
-def create_simple_model():
-    # Create a simple pipeline with encoder, scaler and KMeans
-    encoders = {'gender': LabelEncoder().fit(['M', 'F'])}
-    scaler = StandardScaler()
-    
-    # Create a simple dataset to fit the scaler
-    sample_data = pd.DataFrame({
-        'age': [30, 40, 25, 35],
-        'gender': ['M', 'F', 'M', 'F'],
-        'height_cm': [170, 160, 175, 165],
-        'weight_kg': [70, 60, 75, 65],
-        'body fat_%': [15, 20, 10, 25],
-        'systolic': [120, 115, 125, 118],
-        'gripForce': [40, 30, 45, 32],
-        'sit and bend forward_cm': [25, 30, 22, 35],
-        'sit-ups counts': [30, 20, 35, 25],
-        'broad jump_cm': [200, 180, 220, 190]
-    })
-    
-    # Transform categorical data
-    for column in ['gender']:
-        sample_data[column] = encoders[column].transform(sample_data[column])
-    
-    # Fit the scaler
-    scaler.fit(sample_data)
-    
-    # Create and fit KMeans model
-    kmeans = KMeans(n_clusters=2, random_state=42)
-    kmeans.fit(scaler.transform(sample_data))
-    
-    # Create pipeline dictionary
-    pipeline = {
-        'encoder': encoders,
-        'scaler': scaler,
-        'kmeans': kmeans
-    }
-    
-    # Save the model
-    joblib.dump(pipeline, model_path)
-    return pipeline
-
-# Try to load the model, if it fails create a simple one
-try:
-    pipeline = joblib.load(model_path)
-    st.sidebar.success("Successfully loaded the trained model!")
-except:
-    st.sidebar.warning("Couldn't find the original model. Using a simplified model for demonstration purposes.")
-    pipeline = create_simple_model()
-
-# Extract components from the pipeline
-encoder = pipeline['encoder']
-scaler = pipeline['scaler']
-kmeans = pipeline['kmeans']
+# Create the model
+model = SimpleBodyPerformanceModel()
 
 # Title section
 st.markdown("""
     <div class="title-container">
         <h1 style="color: black;">🏃‍♂️ Analisis Performa Tubuh</h1>
-        <p style='font-size: 1.2rem; color: #666;'>Sistem analisis clustering untuk menentukan tingkat performa tubuh Anda</p>
+        <p style='font-size: 1.2rem; color: #666;'>Sistem analisis untuk menentukan tingkat performa tubuh Anda</p>
     </div>
 """, unsafe_allow_html=True)
 
@@ -217,7 +215,7 @@ with tab1:
     if st.button('Analisis Performa'):
         with st.spinner('Menganalisis data...'):
             gender_code = 'M' if gender == 'Male' else 'F'
-            data_baru = pd.DataFrame([{
+            data_input = {
                 'age': age,
                 'gender': gender_code,
                 'height_cm': height,
@@ -228,18 +226,11 @@ with tab1:
                 'sit and bend forward_cm': sit_and_bend_forward,
                 'sit-ups counts': sit_ups,
                 'broad jump_cm': broad_jump
-            }])
-
-            # Transform categorical data
-            for column in ['gender']:
-                data_baru[column] = encoder[column].transform(data_baru[[column]])
-
-            # Scale data
-            data_baru_scaled = scaler.transform(data_baru)
+            }
 
             # Predict cluster
-            cluster_pred = kmeans.predict(data_baru_scaled)
-            jarak_cluster = kmeans.transform(data_baru_scaled)
+            cluster_pred, distances = model.predict(data_input)
+            jarak_cluster = [distances]  # Format for consistency
 
             # Display results
             st.markdown("""
@@ -251,18 +242,18 @@ with tab1:
             
             with col1:
                 st.metric(
-                    label="Jarak ke Cluster Performa Tinggi",
-                    value=f"{jarak_cluster[0][0]:.4f}"
+                    label="Kedekatan dengan Profil Performa Tinggi",
+                    value=f"{(1-jarak_cluster[0][1])*100:.1f}%"
                 )
             
             with col2:
                 st.metric(
-                    label="Jarak ke Cluster Performa Rendah",
-                    value=f"{jarak_cluster[0][1]:.4f}"
+                    label="Kedekatan dengan Profil Performa Rendah",
+                    value=f"{jarak_cluster[0][1]*100:.1f}%"
                 )
 
             # Final result
-            if cluster_pred[0] == 0:
+            if cluster_pred == 0:
                 st.success("🌟 Anda termasuk dalam kelompok dengan **PERFORMA TINGGI**")
                 
                 # Add recommendations for high performance
@@ -275,6 +266,33 @@ with tab1:
                 """)
             else:
                 st.warning("⚠️ Anda termasuk dalam kelompok dengan **PERFORMA RENDAH**")
+                
+                # Show which metrics need improvement
+                st.markdown("#### Area yang Perlu Ditingkatkan:")
+                
+                metrics_to_improve = []
+                gender_display = 'Male' if gender_code == 'M' else 'Female'
+                
+                if body_fat > model.thresholds['body fat_%'][gender_display]:
+                    metrics_to_improve.append(f"- **Persentase Lemak Tubuh**: {body_fat}% (target: di bawah {model.thresholds['body fat_%'][gender_display]}%)")
+                
+                if systolic > model.thresholds['systolic']:
+                    metrics_to_improve.append(f"- **Tekanan Darah**: {systolic} mmHg (target: di bawah {model.thresholds['systolic']} mmHg)")
+                
+                if grip_force < model.thresholds['gripForce'][gender_display]:
+                    metrics_to_improve.append(f"- **Kekuatan Genggaman**: {grip_force} kg (target: di atas {model.thresholds['gripForce'][gender_display]} kg)")
+                
+                if sit_and_bend_forward < model.thresholds['sit and bend forward_cm']:
+                    metrics_to_improve.append(f"- **Fleksibilitas**: {sit_and_bend_forward} cm (target: di atas {model.thresholds['sit and bend forward_cm']} cm)")
+                
+                if broad_jump < model.thresholds['broad jump_cm'][gender_display]:
+                    metrics_to_improve.append(f"- **Broad Jump**: {broad_jump} cm (target: di atas {model.thresholds['broad jump_cm'][gender_display]} cm)")
+                
+                if sit_ups < model.thresholds['sit-ups counts'][gender_display]:
+                    metrics_to_improve.append(f"- **Sit-ups**: {sit_ups} (target: di atas {model.thresholds['sit-ups counts'][gender_display]})")
+                
+                for metric in metrics_to_improve:
+                    st.markdown(metric)
                 
                 # Add recommendations for low performance
                 st.markdown("""
@@ -292,7 +310,7 @@ with tab1:
 with tab2:
     st.markdown("""
     ### Tentang Aplikasi
-    Aplikasi ini menggunakan metode clustering untuk menganalisis performa tubuh berdasarkan berbagai parameter fisik. 
+    Aplikasi ini menggunakan metode analisis untuk mengevaluasi performa tubuh berdasarkan berbagai parameter fisik. 
     
     #### Parameter yang Diukur:
     1. **Data Pribadi**
@@ -333,14 +351,13 @@ with tab2:
 with st.sidebar:
     st.header("💡 Tentang Model")
     st.write("""
-    Model clustering digunakan untuk mengklasifikasikan performa tubuh berdasarkan berbagai parameter fisik. 
-    Model ini menggunakan algoritma K-Means dengan 2 cluster yang merepresentasikan performa tinggi dan rendah.
+    Model analisis ini menggunakan pendekatan berbasis aturan untuk mengklasifikasikan performa tubuh berdasarkan standar kesehatan dan kebugaran yang diakui.
     """)
     
     st.divider()
     
     st.header("📊 Panduan Nilai")
-    st.write("""
+    st.markdown("""
     **Persentase Lemak Tubuh:**
     - Pria: 10-20% (ideal), >25% (tinggi)
     - Wanita: 18-28% (ideal), >32% (tinggi)
